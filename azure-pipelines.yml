@@ -1,0 +1,202 @@
+# Azure DevOps CI/CD Pipeline for Blackjack Application
+# This pipeline builds, tests, and deploys the application to Azure
+
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+  paths:
+    exclude:
+      - README.md
+      - REPORT.md
+      - docs/*
+
+pr:
+  branches:
+    include:
+      - main
+      - develop
+
+variables:
+  # Python version
+  pythonVersion: '3.11'
+  
+  # Docker image settings
+  dockerRegistry: '$(DOCKER_REGISTRY)'
+  imageName: 'blackjack-app'
+  imageTag: '$(Build.BuildId)'
+  
+  # Azure settings
+  azureSubscription: '$(AZURE_SUBSCRIPTION)'
+  webAppName: '$(AZURE_WEBAPP_NAME)'
+  resourceGroup: '$(AZURE_RESOURCE_GROUP)'
+  
+  # Coverage threshold
+  coverageThreshold: 70
+
+stages:
+  # Stage 1: Build and Test
+  - stage: Build
+    displayName: 'Build and Test'
+    jobs:
+      - job: BuildAndTest
+        displayName: 'Build, Lint, and Test'
+        pool:
+          vmImage: 'ubuntu-latest'
+        
+        steps:
+          # Checkout code
+          - checkout: self
+            fetchDepth: 0
+          
+          # Setup Python
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+              addToPath: true
+            displayName: 'Setup Python $(pythonVersion)'
+          
+          # Cache pip dependencies
+          - task: Cache@2
+            inputs:
+              key: 'pip | "$(Agent.OS)" | requirements.txt'
+              restoreKeys: |
+                pip | "$(Agent.OS)"
+              path: $(PIP_CACHE_DIR)
+            displayName: 'Cache pip packages'
+          
+          # Install dependencies
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+            displayName: 'Install dependencies'
+          
+          # Code quality checks
+          - script: |
+              pip install ruff black mypy
+              echo "Running Ruff linter..."
+              ruff check app/ tests/ --output-format=github
+              echo "Running Black formatter check..."
+              black --check app/ tests/
+              echo "Running MyPy type checker..."
+              mypy app/ --ignore-missing-imports || true
+            displayName: 'Code Quality Checks'
+            continueOnError: true
+          
+          # Run tests with coverage
+          - script: |
+              pytest tests/ \
+                --cov=app \
+                --cov-report=xml:coverage.xml \
+                --cov-report=html:htmlcov \
+                --cov-report=term-missing \
+                --cov-fail-under=$(coverageThreshold) \
+                --junitxml=test-results.xml \
+                -v
+            displayName: 'Run Tests with Coverage'
+          
+          # Publish test results
+          - task: PublishTestResults@2
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '**/test-results.xml'
+              failTaskOnFailedTests: true
+              testRunTitle: 'Python Tests'
+            displayName: 'Publish Test Results'
+            condition: always()
+          
+          # Publish coverage results
+          - task: PublishCodeCoverageResults@2
+            inputs:
+              summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage.xml'
+              pathToSources: '$(System.DefaultWorkingDirectory)/app'
+            displayName: 'Publish Code Coverage'
+            condition: always()
+          
+          # Publish coverage artifact
+          - task: PublishBuildArtifacts@1
+            inputs:
+              pathToPublish: 'htmlcov'
+              artifactName: 'coverage-report'
+            displayName: 'Publish Coverage HTML Report'
+            condition: always()
+
+  # Stage 2: Build Docker Image
+  - stage: DockerBuild
+    displayName: 'Build Docker Image'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: BuildImage
+        displayName: 'Build and Push Docker Image'
+        pool:
+          vmImage: 'ubuntu-latest'
+        
+        steps:
+          - checkout: self
+          
+          # Login to Azure Container Registry
+          - task: Docker@2
+            inputs:
+              containerRegistry: '$(dockerRegistry)'
+              command: 'login'
+            displayName: 'Login to Container Registry'
+          
+          # Build and push Docker image
+          - task: Docker@2
+            inputs:
+              containerRegistry: '$(dockerRegistry)'
+              repository: '$(imageName)'
+              command: 'buildAndPush'
+              Dockerfile: '**/Dockerfile'
+              tags: |
+                $(imageTag)
+                latest
+            displayName: 'Build and Push Docker Image'
+
+  # Stage 3: Deploy to Azure
+  - stage: Deploy
+    displayName: 'Deploy to Azure'
+    dependsOn: DockerBuild
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployToAzure
+        displayName: 'Deploy to Azure Web App'
+        pool:
+          vmImage: 'ubuntu-latest'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Deploy to Azure Web App for Containers
+                - task: AzureWebAppContainer@1
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    appName: '$(webAppName)'
+                    containers: '$(dockerRegistry)/$(imageName):$(imageTag)'
+                  displayName: 'Deploy to Azure Web App'
+                
+                # Health check after deployment
+                - script: |
+                    echo "Waiting for deployment to complete..."
+                    sleep 30
+                    
+                    # Get the web app URL
+                    APP_URL="https://$(webAppName).azurewebsites.net"
+                    
+                    # Health check
+                    echo "Performing health check on $APP_URL/health"
+                    for i in {1..5}; do
+                      HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$APP_URL/health")
+                      if [ "$HTTP_STATUS" -eq 200 ]; then
+                        echo "Health check passed!"
+                        exit 0
+                      fi
+                      echo "Attempt $i: HTTP status $HTTP_STATUS, retrying in 10 seconds..."
+                      sleep 10
+                    done
+                    echo "Health check failed after 5 attempts"
+                    exit 1
+                  displayName: 'Post-deployment Health Check'

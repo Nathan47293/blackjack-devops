@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Blackjack</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Blackjack</h1>
+        
+        <div class="game-info">
+            <p>Balance: $<span id="balance">100</span></p>
+            <div id="bet-area" class="bet-area">
+                <input type="number" id="bet-amount" min="1" value="10">
+                <button id="place-bet">Place Bet</button>
+            </div>
+            <p id="message" class="message"></p>
+        </div>
+
+        <div class="game-area">
+            <div class="dealer-area">
+                <h2>Dealer's Hand (<span id="dealer-score">0</span>)</h2>
+                <div id="dealer-hand" class="hand"></div>
+            </div>
+
+            <div class="player-area">
+                <h2>Your Hand (<span id="player-score">0</span>)</h2>
+                <div id="player-hand" class="hand"></div>
+            </div>
+
+            <div class="actions" id="action-buttons" style="display: none;">
+                <button id="hit">Hit</button>
+                <button id="stand">Stand</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', path='/js/script.js') }}"></script>
+</body>
+</html>
