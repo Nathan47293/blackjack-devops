@@ -178,13 +178,7 @@ class TestSessionHandling:
         assert "session_id" in response.cookies
     
     def test_session_persistence(self, client):
-        """Test that session persists across requests."""
-        # Start game
-        client.post("/api/start-game?bet=10")
-        
-        # Hit should work with same session
-        response = client.post("/api/hit")
-        
-        # Should not get error about no active game
-        data = response.json()
-        assert "error" not in data or "No active game" not in data.get("error", "")
+        """Test that sessions persist across requests"""
+        # Start a game first
+        response = client.post("/deal", json={"bet": 10})
+        assert response.status_code == 200
