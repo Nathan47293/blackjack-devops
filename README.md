@@ -4,12 +4,12 @@ A web-based Blackjack game built with FastAPI, featuring comprehensive DevOps pr
 
 ## Features
 
-- 🎰 Classic Blackjack gameplay
-- 💾 Persistent game state with database storage
-- 📊 Real-time metrics and monitoring
-- 🐳 Docker containerization
-- 🔄 CI/CD pipeline with Azure DevOps
-- ✅ 70%+ test coverage
+- Classic Blackjack gameplay
+- Persistent game state with database storage
+- Real-time metrics and monitoring
+- Docker containerization
+- CI/CD pipeline with Azure DevOps
+- 70%+ test coverage
 
 ## Tech Stack
 
