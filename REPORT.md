@@ -110,23 +110,21 @@ TOTAL                             89.58%
 ### 3.1 Pipeline Stages
 
 ```yaml
-Stages:
-  1. Build
+Jobs:
+  1. build-and-test
      ├── Setup Python 3.11
      ├── Install dependencies
      ├── Run Ruff linter
      ├── Run Black formatter check
-     ├── Run MyPy type checker
      ├── Execute pytest with coverage
-     └── Publish test results and coverage
+     └── Upload coverage report
 
-  2. DockerBuild (main branch only)
+  2. docker-build-push (main branch only)
      ├── Login to Azure Container Registry
      └── Build and push Docker image
 
-  3. Deploy (main branch only)
-     ├── Deploy to Azure Web App
-     └── Post-deployment health check
+  3. deploy (main branch only)
+     └── Deploy to Azure Web App
 ```
 
 ### 3.2 Quality Gates
@@ -140,7 +138,7 @@ Stages:
 
 ### 3.3 Pipeline Configuration
 
-The pipeline is defined in `azure-pipelines.yml` with:
+The pipeline is defined in `.github/workflows/ci-cd.yml` with:
 - Automatic triggers on `main` and `develop` branches
 - Pull request validation
 - Dependency caching for faster builds
